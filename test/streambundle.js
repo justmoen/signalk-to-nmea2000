@@ -11,7 +11,12 @@ const sinon = require('sinon')
 function makeApp() {
   const buses = {}
   const emitted = []
-  const debug = () => {}
+  const debugMessages = []
+  const debug = (message) => {
+    if (debug.enabled) {
+      debugMessages.push(message)
+    }
+  }
   debug.enabled = false
   const selfData = {
     'environment.depth.surfaceToTransducer.value': 1
@@ -19,6 +24,7 @@ function makeApp() {
   return {
     emitted,
     buses,
+    debugMessages,
     debug,
     error: () => {},
     getSelfPath: (p) => selfData[p],
@@ -60,6 +66,36 @@ describe('onValueChange conversions over the streambundle', () => {
     assert.equal(app.emitted.length, 1)
     assert.equal(app.emitted[0].pgn, 128267)
     assert.deepEqual(app.emitted[0].fields, { Depth: 4.5, Offset: 1 })
+  })
+
+  it('traces an engine notification through to PGN 127489', async () => {
+    const app = makeApp()
+    app.debug.enabled = true
+    const plugin = require('../index.js')(app)
+    plugin.start({
+      ENGINE_PARAMETERS: {
+        enabled: true,
+        engines: [{ signalkId: 'engines.port', instanceId: 0 }]
+      }
+    })
+
+    app.buses['notifications.propulsion.engines.port.checkEngine'].push({
+      value: { state: 'alarm', message: 'Check engine' },
+      $source: 'node-red'
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    plugin.stop()
+
+    const enginePgn = app.emitted.find((pgn) => pgn.pgn === 127489)
+    assert.exists(enginePgn)
+    assert.deepEqual(enginePgn.fields['Discrete Status 1'], ['Check Engine'])
+    assert.isTrue(app.debugMessages.some((message) =>
+      message.includes('input notifications.propulsion.engines.port.checkEngine: state=alarm')
+    ))
+    assert.isTrue(app.debugMessages.some((message) =>
+      message.includes('Engine Parameters status for engines.port: {"discreteStatus1":["Check Engine"],"discreteStatus2":[]}')
+    ))
   })
 
   it('sends 129285 as soon as the course changes, once per change', async () => {

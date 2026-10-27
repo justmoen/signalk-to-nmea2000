@@ -255,7 +255,9 @@ module.exports = function(app) {
         unsubscribes,
         options,
         sendsNmea2000Data(conversion, options),
-        conversion.withholdingKeys
+        conversion.withholdingKeys,
+        conversion.debugKeys,
+        conversion.title
       )
         .onValue(values => {
           if ( values === WITHHELD ) {
@@ -345,7 +347,9 @@ module.exports = function(app) {
     unsubscribes,
     options,
     allowNmea2000,
-    withholdingKeys = keys
+    withholdingKeys = keys,
+    debugKeys = [],
+    debugLabel = 'Conversion'
   ) {
     app.debug(`keys:${keys}`)
     app.debug(`timeouts:${timeouts}`)
@@ -367,6 +371,10 @@ module.exports = function(app) {
         bus = bus.filter( x => x.$source === sourceRef)
       }
       bus.onValue(({ value, source }) => {
+        if (debugKeys.includes(skKey) && app.debug.enabled) {
+          const state = value && typeof value === 'object' ? value.state : undefined
+          app.debug(`${debugLabel} input ${skKey}: state=${state || 'unknown'}`)
+        }
         // A source the user picked explicitly is sent even if it is NMEA 2000
         const fromNmea2000 = !sourceRef && !allowNmea2000 && isNmea2000Source(source)
         if ( fromNmea2000 && !withholdingKeys.includes(skKey) ) {

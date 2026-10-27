@@ -104,10 +104,20 @@ module.exports = (app, plugin) => {
         const keys = engParKeys
           .map(key => `propulsion.${engine.signalkId}.${key}`)
           .concat(statusKeys)
+        app.debug(`Engine Parameters configured for ${engine.signalkId} (NMEA 2000 instance ${engine.instanceId}); status paths: ${statusKeys.join(', ')}`)
+        let lastStatus
         return {
           keys,
           timeouts: keys.map(() => DEFAULT_TIMEOUT),
+          debugKeys: statusKeys,
           callback: (oilPres, oilTemp, temp, altVolt, fuelRate, runTime, coolPres, fuelPres, engLoad, engTorque, ...statusValues) => {
+            const discreteStatus1 = activeEngineStatuses(engineStatus1, statusValues)
+            const discreteStatus2 = activeEngineStatuses(engineStatus2, statusValues.slice(engineStatus1.length))
+            const status = JSON.stringify({ discreteStatus1, discreteStatus2 })
+            if (status !== lastStatus) {
+              app.debug(`Engine Parameters status for ${engine.signalkId}: ${status}`)
+              lastStatus = status
+            }
             return [{
                 pgn: 127489,
                 "Engine Instance": engine.instanceId,
@@ -121,8 +131,8 @@ module.exports = (app, plugin) => {
                 "Total Engine hours": orUndefined(runTime),
                 "Coolant Pressure": orUndefined(coolPres),
                 "Fuel Pressure": orUndefined(fuelPres),
-                "Discrete Status 1": activeEngineStatuses(engineStatus1, statusValues),
-                "Discrete Status 2": activeEngineStatuses(engineStatus2, statusValues.slice(engineStatus1.length)),
+                "Discrete Status 1": discreteStatus1,
+                "Discrete Status 2": discreteStatus2,
                 "Engine Load": orUndefined(engLoad),
                 "Engine Torque": orUndefined(engTorque)
             }]
